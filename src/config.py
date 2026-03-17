@@ -12,6 +12,9 @@ class LangFuseSettings(BaseSettings):
 
 class AuthentikSettings(BaseSettings):
     jwks_url: str
+    client_id: str
+    authorization_url: str
+    token_url: str
 
 class OpenRouterSettings(BaseSettings):
     api_key: str
