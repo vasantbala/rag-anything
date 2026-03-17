@@ -26,5 +26,5 @@ poetry run uvicorn src.api.main:app --reload
 
 ### Running tests
 ```
-poetry run pytest tests/test_health.py
+poetry run pytest tests
 ```
