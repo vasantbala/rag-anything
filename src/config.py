@@ -37,5 +37,6 @@ class Settings(BaseSettings):
     dynamodb_table_name: str
     qdrant: QdrantSettings
     authentik: AuthentikSettings
+    bedrock: BedrockSettings
 
 settings = Settings()
