@@ -18,6 +18,7 @@ class AuthentikSettings(BaseSettings):
 
 class OpenRouterSettings(BaseSettings):
     api_key: str
+    embedding_model: str
     llm_model: str
 
 class BedrockSettings(BaseSettings):
@@ -33,6 +34,7 @@ class Settings(BaseSettings):
     retrieval_top_k: int
     reranker_score_threshold: float
     llm_provider: str
+    embedding_dimensions: int = 1024
     s3_bucket_name: str
     dynamodb_table_name: str
     qdrant: QdrantSettings

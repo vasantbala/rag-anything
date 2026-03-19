@@ -38,7 +38,7 @@ def ensure_collection() -> None:
         if not _client.collection_exists(settings.qdrant.collection_name):
             _client.create_collection(
                 collection_name=settings.qdrant.collection_name,
-                vectors_config={"dense": VectorParams(size=1024, distance=Distance.COSINE)},
+                vectors_config={"dense": VectorParams(size=settings.embedding_dimensions, distance=Distance.COSINE)},
                 sparse_vectors_config={
                     "sparse": SparseVectorParams(index=SparseIndexParams(on_disk=False))
                 },

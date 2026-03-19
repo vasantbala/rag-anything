@@ -33,9 +33,11 @@ def chunk_documents(pages: list[tuple[str, dict]]) -> list[tuple[str, dict]]:
     )
     
     results = []
+    global_chunk_index = 0
     for text, metadata in pages:
         chunks = splitter.split_text(text)
-        for chunk_index, chunk_text in enumerate(chunks):
-            results.append((chunk_text, {**metadata, "chunk_index": chunk_index}))
+        for chunk_text in chunks:
+            results.append((chunk_text, {**metadata, "chunk_index": global_chunk_index}))
+            global_chunk_index += 1
 
     return results
