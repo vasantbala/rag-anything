@@ -4,6 +4,7 @@ from src.ingestor import ingest_file
 from src.storage.dynamo import put_document
 from src.vector_store import _client as qdrant_client, ensure_collection, delete_by_doc_id
 from src.embedder import get_embedder
+from src.retriever import retrieve
 from src.config import settings
 
 PDF_SRC = "tests/Uber-selfdriving.pdf"
@@ -68,6 +69,12 @@ async def main():
     assert count_result.count == result["chunk_count"], (
         f"Expected {result['chunk_count']} vectors in Qdrant, found {count_result.count}"
     )
+
+    # 7. Test retrieval with a sample query
+    result = await retrieve("which car maker does this article talk about?", user_id=USER_ID)
+    for chunk in result.chunks:
+        print(chunk.reranker_score, chunk.doc_id, chunk.text[:100])
+
     print("All checks passed.")
 
 if __name__ == "__main__":
