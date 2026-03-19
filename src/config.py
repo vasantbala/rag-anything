@@ -38,5 +38,11 @@ class Settings(BaseSettings):
     qdrant: QdrantSettings
     authentik: AuthentikSettings
     bedrock: BedrockSettings
+    langfuse: LangFuseSettings
+    openrouter: OpenRouterSettings
+    max_file_size_bytes: int = 50 * 1024 * 1024  # 50MB default
+    aws_access_key_id: str
+    aws_secret_access_key: str
+    aws_region: str
 
 settings = Settings()

@@ -1,11 +1,22 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Depends
 from mangum import Mangum
 from src.config import settings
 from src.api.deps import get_current_user
 from src.auth import UserContext
+from src.vector_store import ensure_collection
 from fastapi.security import OAuth2AuthorizationCodeBearer
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    ensure_collection()
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="RAG anything", 
     version="0.0.1",
     swagger_ui_oauth2_redirect_url="/docs/oauth2-redirect",

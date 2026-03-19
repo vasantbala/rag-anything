@@ -3,7 +3,10 @@ import boto3
 from datetime import datetime, timezone
 from src.config import settings
 
-_dynamodb = boto3.resource("dynamodb", region_name=settings.aws_region)
+_dynamodb = boto3.resource("dynamodb", 
+                           region_name=settings.aws_region,
+                           aws_access_key_id=settings.aws_access_key_id,
+                           aws_secret_access_key=settings.aws_secret_access_key,)
 _table = _dynamodb.Table(settings.dynamodb_table_name)
 
 _loop_executor = None  # uses default ThreadPoolExecutor

@@ -8,6 +8,7 @@ from src.api.loaders.pdf_loader import PdfLoader
 from src.api.loaders.docx_loader import DocxLoader
 #from src.api.loaders.txt_loader import TxtLoader
 #from src.api.loaders.md_loader import MdLoader
+from src.storage.s3 import delete_file
 from src.config import settings
 
 _LOADERS = {
@@ -54,6 +55,8 @@ async def ingest_file(
     except Exception:
         # Mark document as failed in DynamoDB so it doesn't stay stuck in "processing"
         await update_document_status(user_id, doc_id, status="failed", expected_status="processing")
+        # Also delete the raw file from S3 - no orphaned files on failed ingestion
+        await delete_file(user_id, doc_id, filename)
         raise
 
     finally:

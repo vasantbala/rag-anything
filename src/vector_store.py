@@ -13,6 +13,7 @@ from qdrant_client.models import (
     FieldCondition,
     MatchValue,
     PayloadSchemaType,
+    HnswConfigDiff
 )
 
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
@@ -27,20 +28,21 @@ Not relevant at this scale, but worth knowing the knob exists
 in VectorParams(hnsw_config=HnswConfigDiff(...)).
 """
 
-_client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key)
+_client = QdrantClient(url=settings.qdrant.url, api_key=settings.qdrant.api_key)
 
 UPSERT_BATCH = 100
 
 def ensure_collection() -> None:
     # Catch 409 race condition — two Lambda instances starting simultaneously
     try:
-        if not _client.collection_exists(settings.qdrant_collection_name):
+        if not _client.collection_exists(settings.qdrant.collection_name):
             _client.create_collection(
-                collection_name=settings.qdrant_collection_name,
+                collection_name=settings.qdrant.collection_name,
                 vectors_config={"dense": VectorParams(size=1024, distance=Distance.COSINE)},
                 sparse_vectors_config={
                     "sparse": SparseVectorParams(index=SparseIndexParams(on_disk=False))
                 },
+                hnsw_config=HnswConfigDiff(payload_m=16, m=16),
             )
     except UnexpectedResponse as e:
         if e.status_code != 409:
@@ -49,7 +51,7 @@ def ensure_collection() -> None:
     # Payload indexes — must exist before any query/delete that filters on these fields
     for field in ("user_id", "doc_id"):
         _client.create_payload_index(
-            collection_name=settings.qdrant_collection_name,
+            collection_name=settings.qdrant.collection_name,
             field_name=field,
             field_schema=PayloadSchemaType.KEYWORD,
         )
@@ -60,7 +62,7 @@ def ensure_collection() -> None:
     retry=retry_if_exception_type((UnexpectedResponse, httpx.ConnectError, httpx.TimeoutException)),
 )
 def _upsert_batch(points: list[PointStruct]) -> None:
-    _client.upsert(collection_name=settings.qdrant_collection_name, points=points)
+    _client.upsert(collection_name=settings.qdrant.collection_name, points=points)
             
 def upsert_chunks(
     chunks: list[tuple[str, dict]],
@@ -103,7 +105,7 @@ def upsert_chunks(
 )
 def delete_by_doc_id(doc_id: str, user_id: str) -> None:
     _client.delete(
-        collection_name=settings.qdrant_collection_name,
+        collection_name=settings.qdrant.collection_name,
         points_selector=FilterSelector(
             filter=Filter(
                 must=[

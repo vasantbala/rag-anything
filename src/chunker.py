@@ -22,14 +22,14 @@ If someone uploads the same document twice, it re-ingests. The deterministic UUI
 5. No async / concurrent embedding
 embed_texts calls Bedrock synchronously in batches of 10. At scale you'd call multiple batches concurrently with asyncio.gather.
 """
-def chuck_documents(pages: list[tuple[str, dict]]) -> list[tuple[str, dict]]:
+def chunk_documents(pages: list[tuple[str, dict]]) -> list[tuple[str, dict]]:
     # from_tiktoken_encoder counts actual tokens, not characters
     # cl100k_base is the BPE tokenizer used by GPT-4 / text-embedding-3 —
     # Titan v2 doesn't publish its tokenizer so this is the industry-standard proxy
     splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
         encoding_name="cl100k_base",
-        chunk_size=settings.chunking.chunk_size,
-        chunk_overlap=settings.chunking.chunk_overlap,
+        chunk_size=settings.chunk_size,
+        chunk_overlap=settings.chunk_overlap,
     )
     
     results = []
