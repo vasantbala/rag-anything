@@ -47,15 +47,15 @@ def _qdrant_hybrid_search(
     if doc_ids:
         must.append(FieldCondition(key="doc_id", match=MatchAny(any=doc_ids)))
 
+    f = Filter(must=must)
     response = client.query_points(
         collection_name=settings.qdrant.collection_name,
         prefetch=[
-            Prefetch(query=dense_vec, using="dense", limit=limit),
-            Prefetch(query=sparse_vec, using="sparse", limit=limit),
+            Prefetch(query=dense_vec, using="dense", limit=limit, filter=f),
+            Prefetch(query=sparse_vec, using="sparse", limit=limit, filter=f),
         ],
         query=FusionQuery(fusion=Fusion.RRF),
         limit=limit,
-        query_filter=Filter(must=must),
         with_payload=True,
     )
     return response.points
@@ -100,7 +100,7 @@ async def retrieve(
             source_type=p.get("source_type", ""),
             chunk_index=p.get("chunk_index", 0),
             page_number=p.get("page_number"),
-            reranker_score=score,
+            reranker_score=float(score),
             metadata={k: v for k, v in p.items() if k not in known_keys},
         ))
 

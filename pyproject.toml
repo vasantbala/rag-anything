@@ -29,7 +29,8 @@ dependencies = [
     "botocore[crt] (>=1.42.71,<2.0.0)",
     "openai (>=1.0.0,<2.0.0)",
     "flashrank (>=0.2.10,<0.3.0)",
-    "ragas (>=0.4.3,<0.5.0)"
+    "ragas (>=0.4.3,<0.5.0)",
+    "python-multipart (>=0.0.22,<0.0.23)"
 ]
 
 
@@ -40,6 +41,9 @@ build-backend = "poetry.core.masonry.api"
 [tool.pytest.ini_options]
 pythonpath = ["."]
 asyncio_mode = "auto"
+markers = [
+    "integration: mark test as integration (requires live external services)",
+]
 
 [dependency-groups]
 dev = [

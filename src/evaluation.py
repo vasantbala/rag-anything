@@ -10,7 +10,7 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from ragas import EvaluationDataset, SingleTurnSample, evaluate
 from ragas.embeddings import LangchainEmbeddingsWrapper
 from ragas.llms import LangchainLLMWrapper
-from ragas.metrics import AnswerRelevancy, Faithfulness
+from ragas.metrics.collections import AnswerRelevancy, Faithfulness
 
 from src.config import settings
 

@@ -114,3 +114,12 @@ async def delete_document(user_id: str, doc_id: str) -> None:
         _table.delete_item,
         Key={"PK": f"USER#{user_id}", "SK": f"DOC#{doc_id}"},
     )
+
+
+async def get_document_config(user_id: str, doc_id: str) -> dict | None:
+    """Return the full DynamoDB item for a document, or None if not found."""
+    response = await _run(
+        _table.get_item,
+        Key={"PK": f"USER#{user_id}", "SK": f"DOC#{doc_id}"},
+    )
+    return response.get("Item")
