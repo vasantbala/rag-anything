@@ -11,14 +11,11 @@ from openai import OpenAI
 from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type
 from langfuse import Langfuse
 from src.config import settings
+from src.observability import get_langfuse
 
 BATCH_SIZE = 10
 
-_langfuse = Langfuse(
-    public_key=settings.langfuse.public_key,
-    secret_key=settings.langfuse.secret_key,
-    host=settings.langfuse.host,
-)
+_langfuse = get_langfuse()
 
 # LRU embedding cache — shared across providers, keyed on SHA-256 of text
 _cache: LRUCache = LRUCache(maxsize=1000)
