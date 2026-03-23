@@ -11,7 +11,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends gcc libgomp1 curl \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir poetry
+RUN pip install --no-cache-dir poetry poetry-plugin-export
 
 COPY pyproject.toml poetry.lock ./
 RUN poetry export -f requirements.txt --only main --without-hashes -o /tmp/requirements.txt \

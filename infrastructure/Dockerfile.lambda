@@ -2,12 +2,12 @@
 # Must use the AWS Lambda base image; CMD must point to the Mangum handler
 FROM public.ecr.aws/lambda/python:3.11
 
-# Build tools needed for packages that don't ship pre-built wheels for Amazon Linux 2023
-RUN dnf install -y gcc gcc-c++ && dnf clean all
+# Build tools needed for packages that don't ship pre-built wheels for Amazon Linux 2
+RUN yum install -y gcc gcc-c++ && yum clean all
 
 # Export requirements from Poetry lockfile, then install via pip.
 # pip --prefer-binary avoids source builds (onnxruntime, pyarrow, scipy have wheels).
-RUN pip install --no-cache-dir poetry
+RUN pip install --no-cache-dir poetry poetry-plugin-export
 
 COPY pyproject.toml poetry.lock ./
 RUN poetry export -f requirements.txt --only main --without-hashes -o /tmp/requirements.txt \
