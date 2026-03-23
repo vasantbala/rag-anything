@@ -66,6 +66,21 @@ class IngestResponse(BaseModel):
     status: str
 
 
+
+# --- Retrieval-only response (no LLM) ---
+class RetrievedChunkModel(BaseModel):
+    text: str
+    doc_id: str
+    source_type: str
+    chunk_index: int
+    page_number: int | None = None
+    reranker_score: float
+    metadata: dict = {}
+
+class RetrieveResponse(BaseModel):
+    chunks: list[RetrievedChunkModel]
+    sufficient: bool
+
 class QueryResponse(BaseModel):
     answer: str
     sources: list[dict]
