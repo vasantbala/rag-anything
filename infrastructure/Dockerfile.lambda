@@ -1,24 +1,42 @@
 # Lambda image — used for AWS Lambda deployment
-# Must use the AWS Lambda base image; CMD must point to the Mangum handler
-FROM public.ecr.aws/lambda/python:3.11
+# Multi-stage build:
+#   Stage 1 (builder): install all Python deps in a full Debian image that has
+#                      compilers and pre-built wheels for every platform.
+#   Stage 2 (runtime): copy only the installed site-packages into the Lambda
+#                      base image — no compiler toolchain in the final image.
 
-# Build tools needed for packages that don't ship pre-built wheels for Amazon Linux 2
-RUN yum install -y gcc gcc-c++ && yum clean all
+# ── Stage 1: dependency builder ───────────────────────────────────────────────
+FROM python:3.11-slim AS builder
 
-# Export requirements from Poetry lockfile, then install via pip.
-# pip --prefer-binary avoids source builds (onnxruntime, pyarrow, scipy have wheels).
+WORKDIR /build
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN pip install --no-cache-dir poetry poetry-plugin-export
 
 COPY pyproject.toml poetry.lock ./
+
+# Export lockfile → requirements.txt, then install into an isolated target dir
 RUN poetry export -f requirements.txt --only main --without-hashes -o /tmp/requirements.txt \
-    && pip install --no-cache-dir --prefer-binary -r /tmp/requirements.txt
+    && pip install --no-cache-dir --prefer-binary \
+       --target /build/packages \
+       -r /tmp/requirements.txt
 
-# Pre-download ML models so they are baked into the image.
-# Lambda cold starts cannot afford a ~80 MB download on first invocation.
-RUN python -c "import flashrank; flashrank.Ranker(model_name='ms-marco-MiniLM-L-12-v2')"
-RUN python -c "from fastembed import SparseTextEmbedding; SparseTextEmbedding(model_name='Qdrant/bm25')"
+# Pre-download ML models into the packages directory so they are baked in
+RUN PYTHONPATH=/build/packages python -c \
+    "import flashrank; flashrank.Ranker(model_name='ms-marco-MiniLM-L-12-v2')"
+RUN PYTHONPATH=/build/packages python -c \
+    "from fastembed import SparseTextEmbedding; SparseTextEmbedding(model_name='Qdrant/bm25')"
 
-# LAMBDA_TASK_ROOT is /var/task on the Lambda base image
+# ── Stage 2: Lambda runtime ───────────────────────────────────────────────────
+FROM public.ecr.aws/lambda/python:3.11
+
+# Copy installed packages from builder
+COPY --from=builder /build/packages/ /var/task/
+
+# Copy application source
 COPY src/ ${LAMBDA_TASK_ROOT}/src/
 
 CMD ["src.api.main.handler"]
