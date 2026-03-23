@@ -1,0 +1,174 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel in-progress runs on the same branch when a new push arrives
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # GitHub Container Registry — server image (Oracle Cloud)
+  SERVER_IMAGE: ghcr.io/${{ github.repository }}
+  # Short SHA used as image tag
+  SHA: ${{ github.sha }}
+
+jobs:
+  # ── TEST ────────────────────────────────────────────────────────────────────
+  test:
+    runs-on: ubuntu-latest
+    env:
+      ENVIRONMENT: test
+      CHUNK_SIZE: "500"
+      CHUNK_OVERLAP: "50"
+      RETRIEVAL_TOP_K: "20"
+      RERANKER_SCORE_THRESHOLD: "0.05"
+      LLM_PROVIDER: openrouter
+      EMBEDDING_DIMENSIONS: "1024"
+      S3_BUCKET_NAME: test-bucket
+      DYNAMODB_TABLE_NAME: test-table
+      AWS_REGION: us-east-1
+      QDRANT__URL: http://localhost:6333
+      QDRANT__API_KEY: test-key
+      QDRANT__COLLECTION_NAME: test-collection
+      AUTHENTIK__JWKS_URL: http://localhost/jwks
+      AUTHENTIK__CLIENT_ID: test-client
+      AUTHENTIK__AUTHORIZATION_URL: http://localhost/auth
+      AUTHENTIK__TOKEN_URL: http://localhost/token
+      BEDROCK__REGION: us-east-1
+      BEDROCK__EMBEDDING_MODEL: amazon.titan-embed-text-v2:0
+      BEDROCK__LLM_MODEL: us.amazon.nova-micro-v1:0
+      LANGFUSE__PUBLIC_KEY: pk-test
+      LANGFUSE__SECRET_KEY: sk-test
+      LANGFUSE__HOST: http://localhost:3000
+      OPENROUTER__API_KEY: sk-or-test
+      OPENROUTER__EMBEDDING_MODEL: qwen/qwen3-embedding-8b
+      OPENROUTER__LLM_MODEL: openrouter/free
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Cache Poetry dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pypoetry
+          key: poetry-${{ hashFiles('poetry.lock') }}
+
+      - name: Install dependencies
+        run: |
+          poetry config virtualenvs.create false
+          poetry install --with dev --no-interaction --no-ansi
+
+      - name: Run tests
+        run: |
+          poetry run pytest tests/ -v \
+            --ignore=tests/test_bedrock_hello.py \
+            --ignore=tests/test_openrouter_hello.py \
+            -m "not integration"
+
+  # ── BUILD server image → GitHub Container Registry ────────────────────────
+  # Used for Oracle Cloud / homelab deployment (python:3.11-slim + uvicorn)
+  build-server:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write   # required to push to ghcr.io
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push server image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infrastructure/Dockerfile.server
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
+            ghcr.io/${{ github.repository }}:latest
+
+  # ── BUILD Lambda image → AWS ECR ──────────────────────────────────────────
+  # Used for AWS Lambda deployment
+  build-lambda:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Log in to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Lambda image
+        run: |
+          docker build -f infrastructure/Dockerfile.lambda \
+            -t ${{ secrets.ECR_REGISTRY }}/rag-service:${{ github.sha }} .
+          docker tag ${{ secrets.ECR_REGISTRY }}/rag-service:${{ github.sha }} \
+                     ${{ secrets.ECR_REGISTRY }}/rag-service:latest
+          docker push ${{ secrets.ECR_REGISTRY }}/rag-service:${{ github.sha }}
+          docker push ${{ secrets.ECR_REGISTRY }}/rag-service:latest
+
+  # ── DEPLOY → AWS Lambda ────────────────────────────────────────────────────
+  # Updates the Lambda function to point at the new ECR image.
+  # Runs only when manually triggered via Actions → Run workflow.
+  # NOTE: For first-time stack creation, run `sam deploy` manually from your
+  #       workstation using infrastructure/template.yaml.
+  deploy-aws:
+    needs: build-lambda
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    environment: aws   # optional: add required reviewers in repo Settings → Environments
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Update Lambda image
+        run: |
+          aws lambda update-function-code \
+            --function-name rag-service-prod \
+            --image-uri ${{ secrets.ECR_REGISTRY }}/rag-service:${{ github.sha }} \
+            --region ${{ secrets.AWS_REGION }}
+          aws lambda wait function-updated \
+            --function-name rag-service-prod \
+            --region ${{ secrets.AWS_REGION }}
+
+      - name: Smoke test
+        run: |
+          URL=$(aws cloudformation describe-stacks \
+            --stack-name rag-service-prod \
+            --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" \
+            --output text)
+          curl -f "$URL/health"

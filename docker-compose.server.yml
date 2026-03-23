@@ -9,13 +9,17 @@
 #   cp docker-compose.server.yml /opt/rag-anything/
 #   docker compose -f docker-compose.server.yml up -d
 #
+# To pull and restart after a new image is published:
+#   docker pull ghcr.io/vasantbala/rag-anything:latest
+#   cd /opt/rag-anything && docker compose -f docker-compose.server.yml up -d --no-deps app
+#
 # The CI pipeline handles subsequent deployments via SSH.
 
 version: "3.9"
 
 services:
   app:
-    image: registry.gitlab.com/vb-home-lab/rag-anything:latest
+    image: ghcr.io/vasantbala/rag-anything:latest
     restart: unless-stopped
     ports:
       - "8000:8000"
