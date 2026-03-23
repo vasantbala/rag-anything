@@ -1,0 +1,33 @@
+# Oracle Cloud production deployment
+#
+# This file manages only the app service.
+# Qdrant and Langfuse continue to run from docker-compose.dev.yml on the same host.
+#
+# First-time setup on the Oracle host:
+#   mkdir -p /opt/rag-anything
+#   cp .env /opt/rag-anything/.env          # copy your production .env
+#   cp docker-compose.server.yml /opt/rag-anything/
+#   docker compose -f docker-compose.server.yml up -d
+#
+# The CI pipeline handles subsequent deployments via SSH.
+
+version: "3.9"
+
+services:
+  app:
+    image: registry.gitlab.com/vb-home-lab/rag-anything:latest
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file: .env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

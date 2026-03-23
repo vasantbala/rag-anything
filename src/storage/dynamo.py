@@ -3,10 +3,17 @@ import boto3
 from datetime import datetime, timezone
 from src.config import settings
 
-_dynamodb = boto3.resource("dynamodb", 
-                           region_name=settings.aws_region,
-                           aws_access_key_id=settings.aws_access_key_id,
-                           aws_secret_access_key=settings.aws_secret_access_key,)
+def _boto3_kwargs() -> dict:
+    """Return boto3 keyword args, omitting explicit credentials on Lambda
+    where the execution role supplies them automatically."""
+    kwargs: dict = {"region_name": settings.aws_region}
+    if settings.aws_access_key_id:
+        kwargs["aws_access_key_id"] = settings.aws_access_key_id
+        kwargs["aws_secret_access_key"] = settings.aws_secret_access_key
+    return kwargs
+
+
+_dynamodb = boto3.resource("dynamodb", **_boto3_kwargs())
 _table = _dynamodb.Table(settings.dynamodb_table_name)
 
 _loop_executor = None  # uses default ThreadPoolExecutor

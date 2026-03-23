@@ -2,12 +2,17 @@ import asyncio
 import boto3
 from src.config import settings
 
-_s3 = boto3.client(
-    "s3",
-    region_name=settings.aws_region,
-    aws_access_key_id=settings.aws_access_key_id,
-    aws_secret_access_key=settings.aws_secret_access_key,
-)
+def _boto3_kwargs() -> dict:
+    """Return boto3 keyword args, omitting explicit credentials on Lambda
+    where the execution role supplies them automatically."""
+    kwargs: dict = {"region_name": settings.aws_region}
+    if settings.aws_access_key_id:
+        kwargs["aws_access_key_id"] = settings.aws_access_key_id
+        kwargs["aws_secret_access_key"] = settings.aws_secret_access_key
+    return kwargs
+
+
+_s3 = boto3.client("s3", **_boto3_kwargs())
 
 # Magic bytes for allowed file types — checked before any upload
 _MAGIC_BYTES: dict[bytes, str] = {

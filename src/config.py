@@ -43,8 +43,10 @@ class Settings(BaseSettings):
     langfuse: LangFuseSettings
     openrouter: OpenRouterSettings
     max_file_size_bytes: int = 50 * 1024 * 1024  # 50MB default
-    aws_access_key_id: str
-    aws_secret_access_key: str
-    aws_region: str
+    # On AWS Lambda the execution role provides credentials automatically.
+    # Set these only for local dev / non-lambda environments where no IAM role is present.
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
+    aws_region: str = "us-east-1"
 
 settings = Settings()

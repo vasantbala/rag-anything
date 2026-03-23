@@ -13,12 +13,11 @@ class BedrockProvider(LLMProvider):
     """
 
     def __init__(self) -> None:
-        self._client = boto3.client(
-            "bedrock-runtime",
-            region_name=settings.bedrock.region,
-            aws_access_key_id=settings.aws_access_key_id,
-            aws_secret_access_key=settings.aws_secret_access_key,
-        )
+        kwargs: dict = {"region_name": settings.bedrock.region}
+        if settings.aws_access_key_id:
+            kwargs["aws_access_key_id"] = settings.aws_access_key_id
+            kwargs["aws_secret_access_key"] = settings.aws_secret_access_key
+        self._client = boto3.client("bedrock-runtime", **kwargs)
         self.model_id = settings.bedrock.llm_model
 
     def _converse_sync(self, system: list[dict], conversation: list[dict]) -> dict:

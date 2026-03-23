@@ -1,0 +1,208 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: RAG Anything — FastAPI on Lambda with API Gateway, S3, and DynamoDB
+
+# ── Parameters ────────────────────────────────────────────────────────────────
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues: [dev, prod]
+    Default: prod
+
+  ImageUri:
+    Type: String
+    Description: >
+      Full ECR image URI including tag, e.g.
+      123456789.dkr.ecr.us-east-1.amazonaws.com/rag-service:abc1234
+      Passed at deploy time via --parameter-overrides ImageUri=...
+
+  # ── Non-sensitive config — stored as plain SSM Strings ────────────────────
+  QdrantUrl:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /rag-service/qdrant-url
+
+  QdrantCollectionName:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /rag-service/qdrant-collection-name
+
+  AuthentikJwksUrl:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /rag-service/authentik-jwks-url
+
+  AuthentikClientId:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /rag-service/authentik-client-id
+
+  AuthentikAuthorizationUrl:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /rag-service/authentik-authorization-url
+
+  AuthentikTokenUrl:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /rag-service/authentik-token-url
+
+  LangfuseHost:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /rag-service/langfuse-host
+
+  LlmProvider:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /rag-service/llm-provider
+
+  OpenRouterEmbeddingModel:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /rag-service/openrouter-embedding-model
+
+  OpenRouterLlmModel:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /rag-service/openrouter-llm-model
+
+# ── Globals ───────────────────────────────────────────────────────────────────
+Globals:
+  Function:
+    Timeout: 60        # retrieval + reranking + LLM can take 10-15s
+    MemorySize: 1024   # FlashRank cross-encoder needs headroom; tune down to 512 if stable
+
+# ── Resources ─────────────────────────────────────────────────────────────────
+Resources:
+
+  # ── API Gateway ─────────────────────────────────────────────────────────────
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Environment
+      CorsConfiguration:
+        AllowOrigins:
+          - "https://your-frontend-domain.com"   # TODO: update before go-live
+        AllowHeaders:
+          - Authorization
+          - Content-Type
+        AllowMethods:
+          - GET
+          - POST
+          - DELETE
+
+  # ── Lambda function ──────────────────────────────────────────────────────────
+  RagServiceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "rag-service-${Environment}"
+      PackageType: Image
+      ImageUri: !Ref ImageUri
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+
+          # Non-sensitive — resolved from SSM at CloudFormation deploy time
+          QDRANT__URL: !Ref QdrantUrl
+          QDRANT__COLLECTION_NAME: !Ref QdrantCollectionName
+          AUTHENTIK__JWKS_URL: !Ref AuthentikJwksUrl
+          AUTHENTIK__CLIENT_ID: !Ref AuthentikClientId
+          AUTHENTIK__AUTHORIZATION_URL: !Ref AuthentikAuthorizationUrl
+          AUTHENTIK__TOKEN_URL: !Ref AuthentikTokenUrl
+          LANGFUSE__HOST: !Ref LangfuseHost
+          LLM_PROVIDER: !Ref LlmProvider
+          OPENROUTER__EMBEDDING_MODEL: !Ref OpenRouterEmbeddingModel
+          OPENROUTER__LLM_MODEL: !Ref OpenRouterLlmModel
+
+          # Sensitive — CloudFormation resolves from SSM SecureString at deploy time
+          # (stored as encrypted Lambda env vars at rest; never appears in the template)
+          QDRANT__API_KEY: "{{resolve:ssm-secure:/rag-service/qdrant-api-key}}"
+          LANGFUSE__PUBLIC_KEY: "{{resolve:ssm-secure:/rag-service/langfuse-public-key}}"
+          LANGFUSE__SECRET_KEY: "{{resolve:ssm-secure:/rag-service/langfuse-secret-key}}"
+          OPENROUTER__API_KEY: "{{resolve:ssm-secure:/rag-service/openrouter-api-key}}"
+
+          # AWS infra — resolved from CloudFormation at deploy time
+          S3_BUCKET_NAME: !Ref DocumentsBucket
+          DYNAMODB_TABLE_NAME: !Ref DocumentsTable
+          AWS_REGION: !Ref AWS::Region
+
+          # Static tuning config
+          CHUNK_SIZE: "500"
+          CHUNK_OVERLAP: "50"
+          RETRIEVAL_TOP_K: "20"
+          RERANKER_SCORE_THRESHOLD: "0.05"
+          EMBEDDING_DIMENSIONS: "1024"
+          MAX_FILE_SIZE_BYTES: "52428800"
+
+          # Bedrock — Lambda uses execution role; no explicit key needed
+          BEDROCK__REGION: !Ref AWS::Region
+          BEDROCK__EMBEDDING_MODEL: amazon.titan-embed-text-v2:0
+          BEDROCK__LLM_MODEL: us.amazon.nova-micro-v1:0
+
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref DocumentsBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DocumentsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: "*"
+            # Required for CloudFormation to resolve {{resolve:ssm-secure:...}} at deploy time.
+            # The deployment IAM user/role (not Lambda) needs ssm:GetParameter + kms:Decrypt on aws/ssm.
+            # No SSM permissions needed on the Lambda execution role itself.
+
+      Events:
+        ApiEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+
+  # ── S3 Bucket ────────────────────────────────────────────────────────────────
+  DocumentsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "rag-service-docs-${Environment}-${AWS::AccountId}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+
+  # ── DynamoDB Table ───────────────────────────────────────────────────────────
+  DocumentsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "rag-service-documents-${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+# ── Outputs ───────────────────────────────────────────────────────────────────
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}"
+
+  FunctionName:
+    Description: Lambda function name (used in CI deploy-aws job)
+    Value: !Sub "rag-service-${Environment}"
+
+  BucketName:
+    Description: S3 bucket for document storage
+    Value: !Ref DocumentsBucket
+
+  TableName:
+    Description: DynamoDB table name
+    Value: !Ref DocumentsTable

@@ -1,0 +1,32 @@
+# Server image — used for Oracle Cloud / homelab deployment
+# Runs as a standard uvicorn process (not a Lambda handler)
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# gcc: needed by some Python packages at install time
+# libgomp1: OpenMP runtime required by FlashRank
+# curl: used by the health-check
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc libgomp1 curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir poetry
+
+COPY pyproject.toml poetry.lock ./
+RUN poetry config virtualenvs.create false \
+    && poetry install --only main --no-interaction --no-ansi
+
+# Pre-download ML models so they are baked into the image.
+# Without this the first request after a container restart downloads ~80 MB.
+RUN python -c "import flashrank; flashrank.Ranker(model_name='ms-marco-MiniLM-L-12-v2')"
+RUN python -c "from fastembed import SparseTextEmbedding; SparseTextEmbedding(model_name='Qdrant/bm25')"
+
+COPY src/ ./src/
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

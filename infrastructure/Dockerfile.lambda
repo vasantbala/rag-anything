@@ -1,0 +1,19 @@
+# Lambda image — used for AWS Lambda deployment
+# Must use the AWS Lambda base image; CMD must point to the Mangum handler
+FROM public.ecr.aws/lambda/python:3.11
+
+RUN pip install --no-cache-dir poetry
+
+COPY pyproject.toml poetry.lock ./
+RUN poetry config virtualenvs.create false \
+    && poetry install --only main --no-interaction --no-ansi
+
+# Pre-download ML models so they are baked into the image.
+# Lambda cold starts cannot afford a ~80 MB download on first invocation.
+RUN python -c "import flashrank; flashrank.Ranker(model_name='ms-marco-MiniLM-L-12-v2')"
+RUN python -c "from fastembed import SparseTextEmbedding; SparseTextEmbedding(model_name='Qdrant/bm25')"
+
+# LAMBDA_TASK_ROOT is /var/task on the Lambda base image
+COPY src/ ${LAMBDA_TASK_ROOT}/src/
+
+CMD ["src.api.main.handler"]
