@@ -48,11 +48,11 @@ async def test_happy_path(mock_embed, mock_sparse, mock_client, mock_ranker):
     mock_client.query_points.return_value = MagicMock(points=points)
     mock_ranker.rerank.return_value = _make_rerank_results(points, score=0.9)
 
-    result = await retrieve("what is RAG?", user_id="user-1")
+    result = await retrieve("what is RAG?", user_id="user-1", top_k=5)
 
     assert isinstance(result, RetrievalResult)
     assert result.sufficient is True
-    assert len(result.chunks) == 5  # default retrieval_top_k
+    assert len(result.chunks) == 5
 
 
 @pytest.mark.asyncio
@@ -98,7 +98,8 @@ async def test_user_id_isolation(mock_embed, mock_sparse, mock_client, mock_rank
     await retrieve("question", user_id="user-abc")
 
     call_kwargs = mock_client.query_points.call_args.kwargs
-    must_conditions = call_kwargs["query_filter"].must
+    # filter lives inside each Prefetch, not on the outer query_filter
+    must_conditions = call_kwargs["prefetch"][0].filter.must
     user_id_condition = next(c for c in must_conditions if c.key == "user_id")
     assert user_id_condition.match.value == "user-abc"
 
@@ -116,7 +117,8 @@ async def test_doc_ids_filter(mock_embed, mock_sparse, mock_client, mock_ranker)
     await retrieve("question", user_id="user-1", doc_ids=["doc-abc"])
 
     call_kwargs = mock_client.query_points.call_args.kwargs
-    must_conditions = call_kwargs["query_filter"].must
+    # filter lives inside each Prefetch, not on the outer query_filter
+    must_conditions = call_kwargs["prefetch"][0].filter.must
     doc_id_condition = next(c for c in must_conditions if c.key == "doc_id")
     assert "doc-abc" in doc_id_condition.match.any
 
