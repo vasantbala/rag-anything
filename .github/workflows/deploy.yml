@@ -6,6 +6,12 @@ on:
     tags: ["v*.*.*"]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to deploy (e.g. 0.1.1 — must already be built and pushed to ECR)"
+        required: true
+        type: string
 
 # Cancel in-progress runs on the same branch when a new push arrives
 concurrency:
@@ -162,12 +168,11 @@ jobs:
           docker push $IMAGE:latest
 
   # ── DEPLOY → AWS Lambda ────────────────────────────────────────────────────
-  # Updates the Lambda function to point at the new ECR image.
-  # Runs only when manually triggered via Actions → Run workflow.
+  # Updates the Lambda function to point at an already-built ECR image.
+  # Trigger manually: Actions → CI/CD → Run workflow → enter the tag (e.g. 0.1.1)
   # NOTE: For first-time stack creation, run `sam deploy` manually from your
   #       workstation using infrastructure/template.yaml.
   deploy-aws:
-    needs: build-lambda
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch'
     environment: aws   # optional: add required reviewers in repo Settings → Environments
@@ -184,7 +189,7 @@ jobs:
         run: |
           aws lambda update-function-code \
             --function-name rag-anything-prod \
-            --image-uri ${{ secrets.ECR_REGISTRY }}/rag-anything:${{ github.sha }} \
+            --image-uri ${{ secrets.ECR_REGISTRY }}/rag-anything:${{ github.event.inputs.tag }} \
             --region ${{ secrets.AWS_REGION }}
           aws lambda wait function-updated \
             --function-name rag-anything-prod \
