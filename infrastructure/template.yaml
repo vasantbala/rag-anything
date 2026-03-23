@@ -13,49 +13,49 @@ Parameters:
     Type: String
     Description: >
       Full ECR image URI including tag, e.g.
-      123456789.dkr.ecr.us-east-1.amazonaws.com/rag-service:abc1234
+      123456789.dkr.ecr.us-east-1.amazonaws.com/rag-anything:abc1234
       Passed at deploy time via --parameter-overrides ImageUri=...
 
   # ── Non-sensitive config — stored as plain SSM Strings ────────────────────
   QdrantUrl:
     Type: AWS::SSM::Parameter::Value<String>
-    Default: /rag-service/qdrant-url
+    Default: /rag-anything/qdrant-url
 
   QdrantCollectionName:
     Type: AWS::SSM::Parameter::Value<String>
-    Default: /rag-service/qdrant-collection-name
+    Default: /rag-anything/qdrant-collection-name
 
   AuthentikJwksUrl:
     Type: AWS::SSM::Parameter::Value<String>
-    Default: /rag-service/authentik-jwks-url
+    Default: /rag-anything/authentik-jwks-url
 
   AuthentikClientId:
     Type: AWS::SSM::Parameter::Value<String>
-    Default: /rag-service/authentik-client-id
+    Default: /rag-anything/authentik-client-id
 
   AuthentikAuthorizationUrl:
     Type: AWS::SSM::Parameter::Value<String>
-    Default: /rag-service/authentik-authorization-url
+    Default: /rag-anything/authentik-authorization-url
 
   AuthentikTokenUrl:
     Type: AWS::SSM::Parameter::Value<String>
-    Default: /rag-service/authentik-token-url
+    Default: /rag-anything/authentik-token-url
 
   LangfuseHost:
     Type: AWS::SSM::Parameter::Value<String>
-    Default: /rag-service/langfuse-host
+    Default: /rag-anything/langfuse-host
 
   LlmProvider:
     Type: AWS::SSM::Parameter::Value<String>
-    Default: /rag-service/llm-provider
+    Default: /rag-anything/llm-provider
 
   OpenRouterEmbeddingModel:
     Type: AWS::SSM::Parameter::Value<String>
-    Default: /rag-service/openrouter-embedding-model
+    Default: /rag-anything/openrouter-embedding-model
 
   OpenRouterLlmModel:
     Type: AWS::SSM::Parameter::Value<String>
-    Default: /rag-service/openrouter-llm-model
+    Default: /rag-anything/openrouter-llm-model
 
 # ── Globals ───────────────────────────────────────────────────────────────────
 Globals:
@@ -86,7 +86,7 @@ Resources:
   RagServiceFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub "rag-service-${Environment}"
+      FunctionName: !Sub "rag-anything-${Environment}"
       PackageType: Image
       ImageUri: !Ref ImageUri
       Environment:
@@ -107,10 +107,10 @@ Resources:
 
           # Sensitive — CloudFormation resolves from SSM SecureString at deploy time
           # (stored as encrypted Lambda env vars at rest; never appears in the template)
-          QDRANT__API_KEY: "{{resolve:ssm-secure:/rag-service/qdrant-api-key}}"
-          LANGFUSE__PUBLIC_KEY: "{{resolve:ssm-secure:/rag-service/langfuse-public-key}}"
-          LANGFUSE__SECRET_KEY: "{{resolve:ssm-secure:/rag-service/langfuse-secret-key}}"
-          OPENROUTER__API_KEY: "{{resolve:ssm-secure:/rag-service/openrouter-api-key}}"
+          QDRANT__API_KEY: "{{resolve:ssm-secure:/rag-anything/qdrant-api-key}}"
+          LANGFUSE__PUBLIC_KEY: "{{resolve:ssm-secure:/rag-anything/langfuse-public-key}}"
+          LANGFUSE__SECRET_KEY: "{{resolve:ssm-secure:/rag-anything/langfuse-secret-key}}"
+          OPENROUTER__API_KEY: "{{resolve:ssm-secure:/rag-anything/openrouter-api-key}}"
 
           # AWS infra — resolved from CloudFormation at deploy time
           S3_BUCKET_NAME: !Ref DocumentsBucket
@@ -154,7 +154,7 @@ Resources:
   DocumentsBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub "rag-service-docs-${Environment}-${AWS::AccountId}"
+      BucketName: !Sub "rag-anything-docs-${Environment}-${AWS::AccountId}"
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -171,7 +171,7 @@ Resources:
   DocumentsTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Sub "rag-service-documents-${Environment}"
+      TableName: !Sub "rag-anything-documents-${Environment}"
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: PK
@@ -197,7 +197,7 @@ Outputs:
 
   FunctionName:
     Description: Lambda function name (used in CI deploy-aws job)
-    Value: !Sub "rag-service-${Environment}"
+    Value: !Sub "rag-anything-${Environment}"
 
   BucketName:
     Description: S3 bucket for document storage
