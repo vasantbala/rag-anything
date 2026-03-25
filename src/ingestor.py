@@ -2,13 +2,12 @@ import os
 from src.chunker import chunk_documents
 from src.embedder import embed_texts
 from src.sparse_embedder import embed_sparse
-from src.storage.dynamo import update_document_status
+from src.storage.factory import delete_file, update_document_status
 from src.vector_store import upsert_chunks
 from src.api.loaders.pdf_loader import PdfLoader
 from src.api.loaders.docx_loader import DocxLoader
 #from src.api.loaders.txt_loader import TxtLoader
 #from src.api.loaders.md_loader import MdLoader
-from src.storage.s3 import delete_file
 from src.config import settings
 
 _LOADERS = {

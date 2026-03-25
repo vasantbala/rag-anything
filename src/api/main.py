@@ -17,6 +17,9 @@ from src.auth import UserContext
 from src.config import settings
 from src.vector_store import ensure_collection
 
+if settings.storage_backend == "local":
+    from src.api.routes.local_upload import router as local_upload_router
+
 logger = logging.getLogger(__name__)
 
 
@@ -85,6 +88,9 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
 app.include_router(documents_router, prefix="/documents", tags=["documents"])
 app.include_router(query_router, tags=["query"])
 app.include_router(evaluate_router, tags=["evaluate"])
+
+if settings.storage_backend == "local":
+    app.include_router(local_upload_router)
 
 
 # ---------------------------------------------------------------------------

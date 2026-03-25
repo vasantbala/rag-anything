@@ -35,8 +35,9 @@ class Settings(BaseSettings):
     reranker_score_threshold: float
     llm_provider: str
     embedding_dimensions: int = 1024
-    s3_bucket_name: str
-    dynamodb_table_name: str
+    # Required in aws mode; unused in local mode
+    s3_bucket_name: str = ""
+    dynamodb_table_name: str = ""
     qdrant: QdrantSettings
     authentik: AuthentikSettings
     bedrock: BedrockSettings
@@ -48,5 +49,9 @@ class Settings(BaseSettings):
     aws_access_key_id: str = ""
     aws_secret_access_key: str = ""
     aws_region: str = "us-east-1"
+    # Storage backend: "aws" (S3 + DynamoDB) or "local" (filesystem + SQLite)
+    storage_backend: str = "aws"
+    local_storage_path: str = "./local_data"
+    app_base_url: str = "http://localhost:8000"
 
 settings = Settings()

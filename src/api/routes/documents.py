@@ -10,14 +10,15 @@ from src.api.deps import get_current_user
 from src.api.models import DbSourceRequest, DocumentResponse, IngestResponse
 from src.auth import UserContext
 from src.ingestor import ingest_file
-from src.storage.dynamo import (
+from src.storage.factory import (
     delete_document,
+    delete_file,
     get_document_config,
     list_documents,
     put_document,
     update_document_status,
+    upload_file,
 )
-from src.storage.s3 import delete_file, upload_file
 from src.vector_store import delete_by_doc_id
 
 logger = logging.getLogger(__name__)
